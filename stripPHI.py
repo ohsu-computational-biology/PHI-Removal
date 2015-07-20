@@ -78,7 +78,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Get inputs for the stripPHI script.') # set arguments
     parser.add_argument('source',help='The directory to be searched.')
-    parser.add_argument('dest', help='The directory to contain the processed images.')
+    parser.add_argument('dest', help="The directory to contain the processed images. Input 'nopath' if the files are to be processed in place")
     parser.add_argument('-v', '--vips_path', default='vips',help='The location of vips')
     parser.add_argument('-f','--extension_from',default='svs',help='Extension to be converted from')
     parser.add_argument('-t','--extension_to',default='png',help='Extension to be converted to')
@@ -95,22 +95,26 @@ def main():
         print "Extension not valid - use only extension name, using only letters"
         exit(1)
         
-    if path.isdir(args.dest): # WARNING - deletes the destination folder entirely
-        input = raw_input("Are you sure you want to remove " + args.dest + '? (y/n)')
-        if not (input in 'yY'):
-            print "Exiting"
-            exit(0)
-        shutil.rmtree(args.dest)
-    shutil.copytree(args.source, args.dest) # backup into destination folder
-    for object in walk(args.dest): # process in destination folder - original folder goes unmodified
+    if args.dest!='nopath': # if a backup is desired
+        if path.isdir(args.dest): # WARNING - deletes the destination folder entirely
+            input = raw_input("Are you sure you want to remove " + args.dest + '? (y/n)')
+            if not (input in 'yY'):
+                print "Exiting"
+                exit(0)
+            shutil.rmtree(args.dest)
+        shutil.copytree(args.source, args.dest) # backup into destination folder
+        processfolder=args.dest
+    else:
+        processfolder=args.source # otherwise, just process in place
+    for object in walk(processfolder): # process in destination folder - original folder goes unmodified
         folder, subfolder, filelist = object
         for file in filelist: # loop through all files in the directory
             name, exten = path.splitext(path.basename(file)) # look at each extension
             if exten=='.'+args.extension_from: # if the extension indicates the desired filetype
                 if folder==args.dest: # run convert command
-                    convert(folder+name,args.dest,args.extension_from,args.extension_to,args.vips_path,args.tile_height,args.tile_width)
+                    convert(folder+name,args.extension_from,args.extension_to,args.vips_path,args.tile_height,args.tile_width)
                 else:
-                    convert(folder+path.sep+name,args.dest,args.extension_from,args.extension_to,args.vips_path,args.tile_height,args.tile_width)
-    
+                    convert(folder+path.sep+name,args.extension_from,args.extension_to,args.vips_path,args.tile_height,args.tile_width)
+        
 if __name__ == '__main__':
     main()
