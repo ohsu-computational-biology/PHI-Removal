@@ -29,10 +29,13 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height):
     
     proc = subprocess.Popen([vips_path + " im_printdesc " + oldname], stdout=subprocess.PIPE, shell=True) # run the vips im_printdesc command, which returns metadata
     (out, err) = proc.communicate() # get the output of the command
-    metadata =  out.split('\n')[1:3] # we only want lines 2 and 3, which contain dimension data
-
-    width = int(metadata[0].split()[1]) # get image dimensions
-    height = int(metadata[1].split()[1])
+    metadata =  out.split('\n') # metadata contains dimension data
+    (width, height) = (0,0)
+    for line in metadata: # look for width and height
+        if not width and line.startswith('width: '):
+            width = int(line.split()[1])
+        elif not height and line.startswith('height: '):
+            height = int(line.split()[1])
     
     xsize = int(1+log10((width-1)//tile_width)) # the maximum number of digits for a x value for a file - will use to make filenames ordered logically
     ysize = int(1+log10((height-1)//tile_height)) # the same for a y value
