@@ -80,13 +80,13 @@ def main():
     Effects: Makes a new directory to contain tiled image data from the origin directory
     """
     parser = argparse.ArgumentParser(description='Get inputs for the stripPHI script.') # set arguments
-    parser.add_argument('source',help='The directory to be searched.')
-    parser.add_argument('dest', help="The directory to contain the processed images. Input 'nopath' if the files are to be processed in place")
+    parser.add_argument('source',help='The directory to be searched. Please use absolute path (the one that starts with / or C:\.')
+    parser.add_argument('dest', help="The directory to contain the processed images. Please use absolute path. Input 'nopath' if the files are to be processed in place")
     parser.add_argument('-v', '--vips_path', default='vips',help='The location of vips')
     parser.add_argument('-f','--extension_from',default='svs',help='Extension to be converted from')
     parser.add_argument('-t','--extension_to',default='png',help='Extension to be converted to')
-    parser.add_argument('-tw','--tile_width',default=256,help='Width of the tiles')
-    parser.add_argument('-th','--tile_height', default=256,help='Height of the tiles')
+    parser.add_argument('-tw','--tile_width',default=256,type=int,help='Width of the tiles')
+    parser.add_argument('-th','--tile_height', default=256,type=int,help='Height of the tiles')
     args = parser.parse_args()
 
     valid_read_exts = set(['png','tiff','jpeg','jpg','jfif','ppm','pgm','pbm','pfm','csv','exr','hdr','bmp','gif','hdf','jp2','jpf','jpx','j2c','j2k','pcx','pnm','ras','xwd','cur','ico','fits','fts','fit','webp','svs','tif','vms','vmu','ndpi','scn','mrxs','svslide','bif','v']) # prevent issues with reading files
