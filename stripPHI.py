@@ -3,7 +3,7 @@ import argparse # for parsing arguments
 import shutil # for doing file tree operations
 import subprocess # for running command line commands
 from math import log10 # for computation (see line 37)
-from os import path, walk, mkdir # some filesystem functions
+from os import path, walk, mkdir, remove # some filesystem functions
 
 def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactivity,fast_mode):
     """
@@ -45,14 +45,14 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactiv
             elif not height and line.startswith('height: '):
                 height = int(line.split()[1])
         
-        if interactivity > 1:
+        if interactivity > 1: # Confirmation if extra interactivity is desired
             cont = False
             while (not cont):
                 input = raw_input("Tile " + oldname + " into " + str(width//tile_width) + " wide x " + str(height//tile_height) + " tall = " + str((width//tile_width)*(height//tile_height)) + " tiles? (y/n/exit)")
                 if not (input in 'yY'):
                     if input.lower() == "exit":
                         return
-                    else:
+                    else: # allows resetting of tile size
                         tile_width = input("Input new tile width:")
                         tile_height = input("Input new tile height:")
                         if tile_width<=0 or tile_height<=0:
@@ -63,7 +63,7 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactiv
         xsize = int(1+log10((width-1)//tile_width)) # the maximum number of digits for a x value for a file - will use to make filenames ordered logically
         ysize = int(1+log10((height-1)//tile_height)) # the same for a y value
         
-        concnum=100
+        concnum=100 # number of extract_area calls to be processed at a time
         command=''
         curcount=0
         
@@ -77,7 +77,7 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactiv
                 name = (xsize-len(str(x)))*'0' + str(x) + '-' + (ysize-len(str(y)))*'0'+str(y) + '.' + ext_to # save the name of the tile
                 curcount+=1
                 command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(tile_width) + ' ' + str(tile_height) + ' ;' # create a vips command to process the current tile
-                #print command # 
+                #print command
                 if curcount>=concnum:
                     subprocess.call([command], shell=True) # call the vips command
                     command = ''
@@ -87,7 +87,7 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactiv
                 name = (xsize-len(str(x)))*'0' + str(x) + '-' + str((height-1)//tile_height) + '.' + ext_to
                 curcount+=1
                 command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(tile_width) + ' ' + str(height%tile_height) + ' ;'
-                #print command #
+                #print command
                 if curcount>=concnum:
                     subprocess.call([command], shell=True)
                     command = ''
@@ -100,7 +100,7 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactiv
                 name = str((width-1)//tile_width) + '-' + (ysize-len(str(y)))*'0'+str(y) + '.' + ext_to
                 curcount+=1
                 command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(width%tile_width) + ' ' + str(tile_height) + ' ;'
-                #print command # 
+                #print command
                 if curcount>=concnum:
                     subprocess.call([command], shell=True)
                     command = ''
@@ -110,16 +110,18 @@ def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactiv
                 name = str((width-1)//tile_width) + '-' + str((height-1)//tile_height) + '.' + ext_to
                 command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(width%tile_width) + ' ' + str(height%tile_height) + ' ;'
                 if interactivity:
-                    print command #
+                    print command
                 if curcount>=concnum:
                     subprocess.call([command], shell=True)
                     command = ''
                     curcount = 0
         if command != '':
-            subprocess.call([command], shell=True)
+            subprocess.call([command], shell=True) # runs any remaining operations
+        #if fast_mode:
+        #    remove(oldname) # remove temporary file
     else:
         if interactivity > 1:
-            input = raw_input("Save " + oldname + " to " + ext_to + "? (y/n)")
+            input = raw_input("Save " + oldname + " to " + filename + '.' + ext_to + "? (y/n)")
             if not input in 'yY':
                 return
                 
@@ -137,20 +139,22 @@ def main():
     Effects: Makes a new directory to contain tiled image data from the origin directory
     """
     parser = argparse.ArgumentParser(description='Get inputs for the stripPHI script.') # set arguments
-    parser.add_argument('source',help='The directory to be searched. Please use absolute path (the one that starts with / or C:\.')
+    parser.add_argument('source',help='The directory to be searched. Please use absolute path (the one that starts with /.')
     parser.add_argument('dest', help="The directory to contain the processed images. Please use absolute path. Input 'nopath' if the files are to be processed in place")
     parser.add_argument('-v', '--vips_path', default='vips',help='The location of vips')
     parser.add_argument('-f','--extension_from',default='svs',help='Extension to be converted from')
     parser.add_argument('-t','--extension_to',default='png',help='Extension to be converted to')
-    parser.add_argument('-tw','--tile_width',default=256,type=int,help='Width of the tiles')
-    parser.add_argument('-th','--tile_height', default=256,type=int,help='Height of the tiles')
-    parser.add_argument('-q','--quick',action='store_true',help='Enables quick mode - creates a very large intermediate file to speed operations')
+    parser.add_argument('-tw','--tile_width',default=0,type=int,help='Width of the tiles')
+    parser.add_argument('-th','--tile_height', default=0,type=int,help='Height of the tiles')
+    parser.add_argument('-q','--quick',action='store_true',help='Enables quick mode - creates a very large intermediate file to speed tiling operations')
     parser.add_argument('-i','--interactive',action='store_true',help='Enable interactivity - prompts for more verification')
     parser.add_argument('-s','--silent',action='store_true',help='Enable silence')
     args = parser.parse_args()
 
-    valid_read_exts = set(['png','tiff','jpeg','jpg','jfif','ppm','pgm','pbm','pfm','csv','exr','hdr','bmp','gif','hdf','jp2','jpf','jpx','j2c','j2k','pcx','pnm','ras','xwd','cur','ico','fits','fts','fit','webp','svs','tif','vms','vmu','ndpi','scn','mrxs','svslide','bif','v']) # prevent issues with reading files
-    valid_write_exts = set(['png','tiff','tif','jpg','jpeg','pbm','pgm','ppm']) # and with writing them
+    #process some arguments
+    valid_read_exts = set(['svs'])
+    #set(['png','tiff','jpeg','jpg','jfif','ppm','pgm','pbm','pfm','csv','exr','hdr','bmp','gif','hdf','jp2','jpf','jpx','j2c','j2k','pcx','pnm','ras','xwd','cur','ico','fits','fts','fit','webp','svs','tif','vms','vmu','ndpi','scn','mrxs','svslide','bif','v']) # prevent issues with reading files
+    valid_write_exts = set(['png','tiff','tif','jpg','jpeg'])#,'pbm','pgm','ppm']) # and with writing them
     if not args.extension_from.lower() in valid_read_exts:
         print "Extension not valid - use only extension name, using only letters"
         exit(1)
