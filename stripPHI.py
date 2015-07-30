@@ -1,137 +1,155 @@
+"""
+stripPHI.py - removes PHI from svs files stored in the input directory, saving them as tiles or fullsize images in the destination directory
+"""
+
 # import everything
 import argparse # for parsing arguments
 import shutil # for doing file tree operations
 import subprocess # for running command line commands
 from math import log10 # for computation (see line 37)
 from os import path, walk, mkdir, remove # some filesystem functions
+import multiprocessing
 
-def convert(filename,ext_from,ext_to,vips_path,tile_width,tile_height,interactivity,fast_mode):
-    """
-    convert: converts a file into a directory containing its tiles
-    Arguments:
-        filename: the name of the file to be converted (absolute path, without extension)
-        ext_from: the file extension of the original file
-        ext_to: the file extension that the converted tiles should have
-        vips_path: the location of the vips binary (if vips is a command line program, this should just be 'vips')
-        tile_width: the desired width of the tiles
-        tile_height: the desired height of the tiles
-        interactivity: the desired behavior of the program, 2 for more interactivity, 0 for silence, 1 for default
-        fast_mode: True if fast mode is enabled, False otherwise - fast mode creates a .v intermediate file, which can be very large (for example, a 24K x 24K pixel image had a intermediate file size of )
-    Returns: 
-        Nothing
-    Effects:
-        If interactivity is enabled, asks for confirmation on tile size
-        Adds a directory containing tiled images into the destination directory
-        Tiled images are to be saved as {0}-{1}.ext_to
-        {0} represents the tile's x-position (0 leftmost, increasing to the right), and {1} represents the tile's y-position (0 topmost, increasing downwards)
-        The values for {0} and {1} will be filled out with 0's in the front to make tile names alphabetical (for instance, 02 will appear before 13 rather than 2 appearing after 13)
-    """
-    oldname = filename+'.'+ext_from # get the original filename
-    if tile_width and tile_height:
-        mkdir(filename) # make the directory to contain tiles
+def createconvert(vips_path,ext_from,ext_to,tile_height,tile_width,interactivity,fast_mode,noverwrite): # make wrapper function - presets all program-wide parameters
+    def convert(filename): # which makes main conversion function
+        """
+        convert: converts a file into a directory containing its tiles
+        Arguments:
+            filename: the name of the file to be converted (absolute path, without extension)
+            ext_from: the file extension of the original file
+            ext_to: the file extension that the converted tiles should have
+            vips_path: the location of the vips binary (if vips is a command line program, this should just be 'vips')
+            tile_width: the desired width of the tiles
+            tile_height: the desired height of the tiles
+            interactivity: the desired behavior of the program, 2 for more interactivity, 0 for silence, 1 for default
+            fast_mode: True if fast mode is enabled, False otherwise - fast mode creates a .v intermediate file, which can be very large (for example, a 24K x 24K pixel image had a intermediate file size of )
+            noverwrite: True if overwriting is not enabled
+        Returns: 
+            Nothing
+        Effects:
+            If interactivity is enabled, asks for confirmation on tile size
+            Adds a directory containing tiled images into the destination directory
+            Tiled images are to be saved as {0}-{1}.ext_to
+            {0} represents the tile's x-position (0 leftmost, increasing to the right), and {1} represents the tile's y-position (0 topmost, increasing downwards)
+            The values for {0} and {1} will be filled out with 0's in the front to make tile names alphabetical (for instance, 02 will appear before 13 rather than 2 appearing after 13)
+        """
+        oldname = filename+'.'+ext_from # get the original filename
+        tw,th = tile_width, tile_height
         
-        if fast_mode:
-            command = vips_path + ' openslideload ' + oldname + ' ' + filename + '.v' # make intermediate file
-            subprocess.call([command],shell = True)
-            oldname=filename+'.v' # future operations now operate on intermediate file instead
+        if tile_width and tile_height:
         
-        proc = subprocess.Popen([vips_path + " im_printdesc " + oldname], stdout=subprocess.PIPE, shell=True) # run the vips im_printdesc command, which returns metadata
-        (out, err) = proc.communicate() # get the output of the command
-        metadata =  out.split('\n') # metadata contains dimension data
-        (width, height) = (0,0)
-        for line in metadata: # look for width and height
-            if not width and line.startswith('width: '):
-                width = int(line.split()[1])
-            elif not height and line.startswith('height: '):
-                height = int(line.split()[1])
-        
-        if interactivity > 1: # Confirmation if extra interactivity is desired
-            cont = False
-            while (not cont):
-                input = raw_input("Tile " + oldname + " into " + str(width//tile_width) + " wide x " + str(height//tile_height) + " tall = " + str((width//tile_width)*(height//tile_height)) + " tiles? (y/n/exit)")
-                if not (input in 'yY'):
-                    if input.lower() == "exit":
-                        return
-                    else: # allows resetting of tile size
-                        tile_width = input("Input new tile width:")
-                        tile_height = input("Input new tile height:")
-                        if tile_width <= 0 or tile_height <= 0:
-                            print "Invalid dimensions"
-                else:
-                    cont = True
-        
-        xsize = int(1+log10((width-1)//tile_width)) # the maximum number of digits for a x value for a file - will use to make filenames ordered logically
-        ysize = int(1+log10((height-1)//tile_height)) # the same for a y value
-        
-        concnum = 100 # number of extract_area calls to be processed at a time
-        command = ''
-        curcount = 0
-        
-        # tiling procedure
-        for x in xrange((width-1)//tile_width): # make all full width tiles
-            xstart = x*tile_width # the leftmost column to be in the current tile
-            for y in xrange((height-1)//tile_height): # full height tiles
+            if noverwrite and path.exists(filename): # not overwriting existing directories
                 if interactivity:
-                    print x, y
-                ystart = y*tile_height # the topmost row to be in the current tile
-                name = (xsize-len(str(x)))*'0' + str(x) + '-' + (ysize-len(str(y)))*'0'+str(y) + '.' + ext_to # save the name of the tile
-                curcount += 1
-                command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(tile_width) + ' ' + str(tile_height) + ' ;' # create a vips command to process the current tile
-                #print command
-                if curcount >= concnum:
-                    subprocess.call([command], shell = True) # call the vips command
-                    command = ''
-                    curcount = 0
-            if height%tile_height != 0: # if there is a remaining partial tile on the bottom of this column, perform the above procedure again for the partial tiles
-                ystart += tile_height
-                name = (xsize-len(str(x)))*'0' + str(x) + '-' + str((height-1)//tile_height) + '.' + ext_to
-                curcount += 1
-                command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(tile_width) + ' ' + str(height%tile_height) + ' ;'
-                #print command
-                if curcount >= concnum:
-                    subprocess.call([command], shell = True)
-                    command = ''
-                    curcount = 0
-                
-        if width%tile_width != 0: # process leftover partial tiles on the right
-            xstart += tile_width
-            for y in xrange((height-1)//tile_height):
-                ystart = y*tile_height
-                name = str((width-1)//tile_width) + '-' + (ysize-len(str(y)))*'0'+str(y) + '.' + ext_to
-                curcount += 1
-                command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(width%tile_width) + ' ' + str(tile_height) + ' ;'
-                #print command
-                if curcount >= concnum:
-                    subprocess.call([command], shell = True)
-                    command = ''
-                    curcount = 0
-            if height%tile_height != 0:
-                ystart += tile_height
-                name = str((width-1)//tile_width) + '-' + str((height-1)//tile_height) + '.' + ext_to
-                command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(width%tile_width) + ' ' + str(height%tile_height) + ' ;'
+                    print "Not overwriting: " filename
+                return
+            mkdir(filename) # make the directory to contain tiles
+            
+            if fast_mode:
+                command = vips_path + ' openslideload ' + oldname + ' ' + filename + '.v' # make intermediate file
+                subprocess.call([command],shell = True)
+                oldname=filename+'.v' # future operations now operate on intermediate file instead
+            
+            proc = subprocess.Popen([vips_path + " im_printdesc " + oldname], stdout=subprocess.PIPE, shell=True) # run the vips im_printdesc command, which returns metadata
+            (out, err) = proc.communicate() # get the output of the command
+            metadata =  out.split('\n') # metadata contains dimension data
+            (width, height) = (0,0)
+            for line in metadata: # look for width and height
+                if not width and line.startswith('width: '):
+                    width = int(line.split()[1])
+                elif not height and line.startswith('height: '):
+                    height = int(line.split()[1])
+            
+            if interactivity > 1: # Confirmation if extra interactivity is desired
+                cont = False
+                while (not cont):
+                    input = raw_input("Tile " + oldname + " into " + str(width//tw) + " wide x " + str(height//th) + " tall = " + str((width//tw)*(height//th)) + " tiles? (y/n/exit)")
+                    if not (input in 'yY'):
+                        if input.lower() == "exit":
+                            return
+                        else: # allows resetting of tile size
+                            tw = input("Input new tile width:")
+                            th = input("Input new tile height:")
+                            if tw <= 0 or th <= 0:
+                                print "Invalid dimensions"
+                    else:
+                        cont = True
+            
+            xsize = int(1+log10((width-1)//tw)) # the maximum number of digits for a x value for a file - will use to make filenames ordered logically
+            ysize = int(1+log10((height-1)//th)) # the same for a y value
+            
+            concnum = 100 # number of extract_area calls to be processed at a time
+            command = ''
+            curcount = 0
+            
+            # tiling procedure
+            for x in xrange((width-1)//tw): # make all full width tiles
+                xstart = x*tw # the leftmost column to be in the current tile
+                for y in xrange((height-1)//th): # full height tiles
+                    if interactivity:
+                        print x, y
+                    ystart = y*th # the topmost row to be in the current tile
+                    name = (xsize-len(str(x)))*'0' + str(x) + '-' + (ysize-len(str(y)))*'0'+str(y) + '.' + ext_to # save the name of the tile
+                    curcount += 1
+                    command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(tw) + ' ' + str(th) + ' ;' # create a vips command to process the current tile
+                    if curcount >= concnum:
+                        subprocess.call([command], shell = True) # call the vips command
+                        command = ''
+                        curcount = 0
+                if height%th != 0: # if there is a remaining partial tile on the bottom of this column, perform the above procedure again for the partial tiles
+                    ystart += th
+                    name = (xsize-len(str(x)))*'0' + str(x) + '-' + str((height-1)//th) + '.' + ext_to
+                    curcount += 1
+                    command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(tw) + ' ' + str(height%th) + ' ;'
+                    if curcount >= concnum:
+                        subprocess.call([command], shell = True)
+                        command = ''
+                        curcount = 0
+                    
+            if width%tw != 0: # process leftover partial tiles on the right
+                xstart += tw
+                for y in xrange((height-1)//th):
+                    ystart = y*th
+                    name = str((width-1)//tw) + '-' + (ysize-len(str(y)))*'0'+str(y) + '.' + ext_to
+                    curcount += 1
+                    command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(width%tw) + ' ' + str(th) + ' ;'
+                    if curcount >= concnum:
+                        subprocess.call([command], shell = True)
+                        command = ''
+                        curcount = 0
+                if height%th != 0:
+                    ystart += th
+                    name = str((width-1)//tw) + '-' + str((height-1)//th) + '.' + ext_to
+                    command += vips_path + " extract_area " + oldname + ' ' + filename + path.sep + name + ' ' + str(xstart) + ' ' + str(ystart) + ' ' + str(width%tw) + ' ' + str(height%th) + ' ;'
+                    if interactivity:
+                        print command
+                    if curcount >= concnum:
+                        subprocess.call([command], shell = True)
+                        command = ''
+                        curcount = 0
+            if command != '':
+                subprocess.call([command], shell = True) # runs any remaining operations
+            if fast_mode:
+                remove(oldname) # remove temporary file
+        else:
+            if noverwrite and path.isfile(filename + '.' + ext_to): # not overwriting existing files
                 if interactivity:
-                    print command
-                if curcount >= concnum:
-                    subprocess.call([command], shell = True)
-                    command = ''
-                    curcount = 0
-        if command != '':
-            subprocess.call([command], shell = True) # runs any remaining operations
-        if fast_mode:
-            remove(oldname) # remove temporary file
-    else:
-        if interactivity > 1:
-            input = raw_input("Save " + oldname + " to " + filename + '.' + ext_to + "? (y/n)")
-            if not input in 'yY':
+                    print "Not overwriting: " + filename + '.' + ext_to
                 return
                 
-        if ext_to == 'png':
-            command = vips_path + " pngsave " + oldname + ' ' + filename + '.' ext_to
-            if interactivity:
-                print command
+            if interactivity > 1:
+                input = raw_input("Save " + oldname + " to " + filename + '.' + ext_to + "? (y/n)")
+                if not input in 'yY':
+                    return
+                    
+            if ext_to == 'png':
+                command = vips_path + " pngsave " + oldname + ' ' + filename + '.' + ext_to
+                if interactivity:
+                    print command
                     command += ' --vips-progress'
-            subprocess.call([command], shell = True)
-            
+                subprocess.call([command], shell = True)
+    return convert
+    
+    
 def main():
     """
     main: sets up command line arguments, then goes through the origin directory to find all files to be processed, then runs the convert command on these
@@ -151,6 +169,7 @@ def main():
     parser.add_argument('-i','--interactive',action='store_true',help='Enable interactivity - prompts for more verification')
     parser.add_argument('-s','--silent',action='store_true',help='Enable silence')
     parser.add_argument('-r','--recursive',action='store_true',help='Recursively process directory')
+    parser.add_argument('-n','--no_overwrite',action='store_true',help='Do not overwrite existing files.')
     args = parser.parse_args()
 
     #process some arguments
@@ -175,6 +194,8 @@ def main():
     if args.interactive:
         interactivity = 2
         
+    convert = createconvert(args.vips_path,args.extension_from.lower(),args.extension_to.lower(),args.tile_height,args.tile_width,interactivity,args.quick,args.no_overwrite) # make the conversion function with preset parameters
+        
     if args.dest != 'nopath': # if a backup is desired
         if path.isdir(args.dest): # WARNING - deletes the destination folder entirely
             if interactivity:
@@ -187,16 +208,28 @@ def main():
         processfolder = args.dest
     else:
         processfolder = args.source # otherwise, just process in place
+    
+    filenames = []
+        
     for object in walk(processfolder): # process in destination folder - original folder goes unmodified
         folder, subfolder, filelist = object
         for file in filelist: # loop through all files in the directory
             name, exten = path.splitext(path.basename(file)) # look at each extension
             if exten == '.'+args.extension_from: # if the extension indicates the desired filetype
-                if folder == args.dest: # run convert command
-                    convert(folder+name,args.extension_from,args.extension_to,args.vips_path,args.tile_height,args.tile_width,interactivity,args.quick)
+                if folder == processfolder: # run convert command
+                    filename = folder+name
                 else:
-                    if args.recursive:
-                        convert(folder+path.sep+name,args.extension_from,args.extension_to,args.vips_path,args.tile_height,args.tile_width,interactivity,args.quick)
-        
+                    if args.recursive: # if not recursive, don't process the file
+                        filename=folder+path
+                    else:
+                        filename=None
+                if filename:
+                    filenames.append(filename)
+    
+    count=multiprocessing.cpu_count()
+    pool=multiprocessing.Pool(processes=count)
+    pool.map(convert,filenames)
+    pool.close()
+    
 if __name__ == '__main__':
     main()
