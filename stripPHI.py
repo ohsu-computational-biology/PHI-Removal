@@ -40,7 +40,7 @@ def createconvert(vips_path,ext_from,ext_to,tile_height,tile_width,interactivity
         
             if noverwrite and path.exists(filename): # not overwriting existing directories
                 if interactivity:
-                    print "Not overwriting: " filename
+                    print "Not overwriting: " + filename
                 return
             mkdir(filename) # make the directory to contain tiles
             
