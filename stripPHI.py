@@ -148,6 +148,13 @@ def convert(datatuple): # which makes main conversion function
                 print command
                 command += ' --vips-progress'
             subprocess.call([command], shell = True)
+            
+        elif ext_to == 'tiff' or ext_to == 'tif':
+            command = vips_path + " tiffsave " + oldname + ' ' + filename + '.' + ext_to
+            if interactivity:
+                print command
+                command += ' --vips-progress'
+            subprocess.call([command], shell = True)
     
     
 def main():
