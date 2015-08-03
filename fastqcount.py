@@ -7,14 +7,17 @@ import argparse # for parsing arguments
 from os import path, walk # some filesystem functions
 from collections import defaultdict
 from random import randint
+import ctypes
 
-def parse_reads(path,onechars,multchars,spikedata,spikeli):
+def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
     """
     parse_reads: reads the file, then calls process on each read, managing the list of spikes
     Arguments:
         path: the path to the fastq file
-        onechars, multchars, spikedata: see the process_spikes docstring for details
+        sharedstrs, spikedata: see the process_spikes docstring for details
         spikeli: the list of spikes, see parse_spikes docstring for details
+        maxerrs: the maximum number of allowed errors in a spike transcription
+        removal: True if spiked reads should be removed
     Returns:
         spikedict: a dictionary with keys as spikes (SPIKE_ID, SPIKE) and values as counts of the spike
     """
@@ -23,35 +26,50 @@ def parse_reads(path,onechars,multchars,spikedata,spikeli):
         spikedict[spike]=0
     spikedict[('0','')]=0 # initialize
     i=0
-    with open(path) as genefile:
-        while genefile.readline():
-            i+=1
-            if i%10000==0: # progress marker
-                print i
-            curread = genefile.readline()
-            spikedict[process(curread, onechars,multchars,spikedata,spikeli)]+=1
-            genefile.readline()
-            genefile.readline() # discard superfluous lines (fastq has reads every 4 lines)
+    with open(path+'.fastq') as genefile:
+        with open(path+'rm.fastq','w') as geneoutfile:
+            currecord=[]
+            toremove=False
+            for i,record in enumerate(genefile):
+                currecord.append(record)
+                if i%10000==0: # progress marker
+                    print i
+                if i%4==1:
+                    curspike = process(record.strip(),sharedstrs,spikedata,spikeli,maxerrs)
+                    if curspike!=('0',''):
+                        toremove=True
+                    spikedict[curspike]+=1
+                if i%4==3:
+                    if not toremove and not removal:
+                        for line in currecord:
+                            geneoutfile.write(line)
+                    currecord=[]
+                    toremove=False
     return spikedict
             
-def process(read,onechars,multchars,spikedata,spikeli):
+def process(read,sharedstrs,spikedata,spikeli,maxerrs):
     """
     process: finds spikes in a read
     Arguments:
         read: the read to be searched for spikes
-        onechars, multchars, spikedata: see process_spikes docstring for details
+        sharedstrs, spikedata: see process_spikes docstring for details
         spikeli: the list of spikes, see parse_spikes docstring for details
+        maxerrs: the maximum number of allowed errors in the sequence
     Returns:
         spike: the spike found in the read, or a blank spike if no spike exists
     """
     spikelen=34 # spikes have 34 characters - change this if that is wrong
+    m = len(sharedstrs[0]) # should be 9
     for i in range(len(read)-spikelen+1):
-        requiredchars=True # check that this starting position has all requirred characters
-        for charno,char in onechars.items():
-            if read[i+charno]!=char:
+        requiredchars=True # check that this starting position has all required characters
+        for charno in range(m):
+            if read[i+charno]!=sharedstrs[0][charno]:
                 requiredchars=False
                 break
-        if requiredchars: # check to see if there is a spike only if all required characters are present
+            if read[i+spikelen-charno-1]!=sharedstrs[1][-1-charno]:
+                requiredchars=False
+                break
+        if requiredchars: # check to see if there is a spike iff all required characters are present
             for spike in spikeli:
                 if read[i:i+spikelen]==spike[1]:
                     return spike
@@ -75,22 +93,16 @@ def process_spikes(spikeli):
     process_spikes: converts list of spikes into more detailed data about all spikes
     Arguments: spikeli - the list of spikes
     Returns:
-        onechars: a dictionary with keys as positions where all spikes contain the same character, and values as the character
-        multchars: a list of positions where spikes differ
+        sharedstrs: the two 9 character strings shared between all spikes, at the beginning and end of each spike
         spikedata: a list of dictionaries for each position of a spike, which point a character to spikes with that character in that position
     """
-    spikedata = ['']*len(spikeli[0][1]) # initialize
-    onechars={}
-    multchars=[]
-    for charno in range(len(spikeli[0][1])):
+    spikedata = ['']*(len(spikeli[0][1])-18) # initialize
+    sharedstrs=(spikeli[0][1][:9],spikeli[0][1][-9:])
+    for charno in range(len(spikeli[0][1])-18):
         spikedata[charno]=defaultdict(set)
         for spike in spikeli:
-            spikedata[charno][spike[1][charno]].add(spike) # build the spikedata dictionary for the specified position
-        if len(spikedata[charno])==1:
-            onechars[charno]=spikedata[charno].keys()[0] # add the single character and position to the dictionary
-        else:
-            multchars.append(charno)
-    return onechars,multchars,spikedata
+            spikedata[charno][spike[1][charno+9]].add(spike) # build the spikedata dictionary for the specified position
+    return sharedstrs,spikedata
     
 def dist_write(spikedict,path):
     """
@@ -109,7 +121,6 @@ def dist_write(spikedict,path):
         for pair in kvpairs:
             outline=[pair[0][0],pair[0][1],str(pair[1])]
             outfile.write(','.join(outline)+'\n') # write the sorted list into the file
-            
     
 def main():
     """
@@ -121,10 +132,12 @@ def main():
     parser = argparse.ArgumentParser(description='Get inputs for the FASTQ counting script.') # set arguments
     parser.add_argument('spikes', help = 'The file containing spike data.')
     parser.add_argument('source', help = 'The directory to be searched.')
+    parser.add_argument('-e','--max_errs',default=0,type=int,help='The maximum number of errors for a spike.')
+    parser.add_argument('-r','--removal',action='store_true',help='If specified, removes reads with spikes.')
     args=parser.parse_args()
     
     spikeli = parse_spikes(args.spikes)
-    onechars,multchars,spikedata=process_spikes(spikeli) # get the spikes and do some preprocessing
+    sharedstrs,spikedata=process_spikes(spikeli) # get the spikes and do some preprocessing
     
     for folder, subfolder, filelist in walk(args.source): # look through source folder for fastq files
         for file in filelist:
@@ -134,7 +147,7 @@ def main():
                     name = folder+name
                 else:
                     name = folder + path.sep + name
-                spikedict = parse_reads(name+'.fastq', onechars,multchars,spikedata,spikeli) # get the spike counts
+                spikedict = parse_reads(name, sharedstrs,spikedata,spikeli,args.max_errs,args.removal) # get the spike counts
                 dist_write(spikedict, name+'.txt') # write the spike counts
     
 if __name__=='__main__':

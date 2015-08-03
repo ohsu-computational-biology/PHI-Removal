@@ -218,7 +218,7 @@ def main():
                     filename = folder+name
                 else:
                     if args.recursive: # if not recursive, don't process the file
-                        filename=folder+path
+                        filename=folder+path.sep+name
                     else:
                         filename=None
                 if filename:
