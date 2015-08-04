@@ -1,8 +1,10 @@
 """
 comparefastqout.py: compares the output file from running fastqcount.py with an expected output file generated from injectspikes.py
+Matthew Jagielski - jagielsk@ohsu.edu
 """
 
 import argparse
+import injectspikes, fastqcount
 
 def compare(correctpath,testpath):
     """

@@ -1,5 +1,6 @@
 """
 injectspikes.py: randomly adds spikes to a fastq file, resulting in another fastq file and an output file containing spike counts
+Matthew Jagielski - jagielsk@ohsu.edu
 """
 
 # import everything
@@ -45,6 +46,12 @@ def rewrite_fastq(basename,spikeli):
         occsorted=sorted(enumerate(occli),key=lambda pair: -pair[1]) # sort the spikes according to order of appearance
         for spikevals in occsorted:
             expout.write(','.join([spikeli[spikevals[0]][0],spikeli[spikevals[0]][1],str(spikevals[1])])+'\n') # and write it all into the file
+    
+    occdict = {}
+    occdict[('0','')]=fails
+    for i in range(len(spikeli)):
+        occdict[spikeli[i]]=occli[i]
+    return occdict
         
         
 def parse_spikes(path):
@@ -63,15 +70,21 @@ def parse_spikes(path):
 def main():
     parser = argparse.ArgumentParser(description='Get inputs for the FASTQ modifying script.') # set arguments
     parser.add_argument('spikes', help = 'The file containing spike data.')
-    parser.add_argument('source', help = 'The file to be modified.')
+    parser.add_argument('source', help = 'The directory to be modified.')
     args=parser.parse_args()
     
     spikeli = parse_spikes(args.spikes) # get the list of spikes
     
-    assert (path.isfile(args.source)) 
-    name, exten = path.splitext(path.basename(args.source))
-    if exten.lower() == '.fastq': # make sure the source file is a legitimate fastq file
-        spikedict = rewrite_fastq(args.source[:-6],spikeli) # modify the source file
+    assert (path.exists(args.source))
+    for folder, subfolder, filelist in walk(args.source): # look through source folder for fastq files
+        for file in filelist:
+            name, exten = path.splitext(path.basename(file))
+            if exten.lower() == '.fastq': # processes only fastq files
+                if folder == args.source:
+                    name = folder+name
+                else:
+                    name = folder + path.sep + name
+                spikedict = rewrite_fastq(name,spikeli) # modify the source file
 
 if __name__=='__main__':
     main()
