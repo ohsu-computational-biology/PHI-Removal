@@ -1,5 +1,6 @@
 """
 fastqcount.py: counts occurrences of specified spikes in a fastq file
+Matthew Jagielski - jagielsk@ohsu.edu
 """
 
 # import everything
@@ -27,7 +28,8 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
     spikedict[('0','')]=0 # initialize
     i=0
     with open(path+'.fastq') as genefile:
-        with open(path+'rm.fastq','w') as geneoutfile:
+        if removal:
+            geneoutfile = open(path+'rm.fastq','w')
             currecord=[]
             toremove=False
             for i,record in enumerate(genefile):
@@ -40,11 +42,18 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
                         toremove=True
                     spikedict[curspike]+=1
                 if i%4==3:
-                    if not toremove and not removal:
+                    if not removal:
                         for line in currecord:
                             geneoutfile.write(line)
                     currecord=[]
                     toremove=False
+            geneoutfile.close()
+        else:
+            for i,record in enumerate(genefile):
+                if i%10000==0:
+                    print i
+                if i%4==1:
+                    spikedict[process(record.strip(),sharedstrs,spikedata,spikeli,maxerrs)]+=1
     return spikedict
             
 def process(read,sharedstrs,spikedata,spikeli,maxerrs):
