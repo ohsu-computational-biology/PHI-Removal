@@ -4,7 +4,7 @@ Matthew Jagielski - jagielsk@ohsu.edu
 """
 
 # import everything
-from os import path
+from os import path, walk
 import argparse
 from random import randint
 
@@ -33,7 +33,7 @@ def rewrite_fastq(basename,spikeli):
                     spikeno=randint(0,len(spikeli)-1) # add a random spike
                     occli[spikeno]+=1
                     
-                    indno = randint(10,len(line)-spikelen-1) # choose somewhere to put the spike
+                    indno = randint(10,len(line)-len(spikeli[spikeno][1])-1) # choose somewhere to put the spike
                     curline=curline[:indno]+spikeli[spikeno][1]+curline[indno+len(spikeli[spikeno][1]):]
                 
                 elif i%4==1:
@@ -43,7 +43,7 @@ def rewrite_fastq(basename,spikeli):
                 
     with open(basename+'xout.txt','w') as expout: # write the output file
         expout.write(','.join(['0','',str(fails)])+'\n') # the no spike count
-        occsorted=sorted(enumerate(occli),key=lambda pair: -pair[1]) # sort the spikes according to order of appearance
+        occsorted=sorted(enumerate(occli),key=lambda pair: (-pair[1],spikeli[pair[0]][1])) # sort the spikes according to order of appearance
         for spikevals in occsorted:
             expout.write(','.join([spikeli[spikevals[0]][0],spikeli[spikevals[0]][1],str(spikevals[1])])+'\n') # and write it all into the file
     

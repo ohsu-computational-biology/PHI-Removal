@@ -49,11 +49,14 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
                     toremove=False
             geneoutfile.close()
         else:
-            for i,record in enumerate(genefile):
+            i=0
+            while genefile.readline():
+                i+=1
                 if i%10000==0:
                     print i
-                if i%4==1:
-                    spikedict[process(record.strip(),sharedstrs,spikedata,spikeli,maxerrs)]+=1
+                spikedict[process(genefile.readline(),sharedstrs,spikedata,spikeli,maxerrs)]+=1
+                genefile.readline()
+                genefile.readline()
     return spikedict
             
 def process(read,sharedstrs,spikedata,spikeli,maxerrs):
@@ -79,6 +82,7 @@ def process(read,sharedstrs,spikedata,spikeli,maxerrs):
                 requiredchars=False
                 break
         if requiredchars: # check to see if there is a spike iff all required characters are present
+            print read[i:i+spikelen]
             for spike in spikeli:
                 if read[i:i+spikelen]==spike[1]:
                     return spike
@@ -126,7 +130,7 @@ def dist_write(spikedict,path):
         kvpairs = []
         for key in spikedict:
             kvpairs.append((key, spikedict[key]))
-        kvpairs = sorted(kvpairs, key=lambda pair: -pair[1]) # sort spikes in descending order by count
+        kvpairs = sorted(kvpairs, key=lambda pair: (-pair[1],pair[0][1])) # sort spikes in descending order by count
         for pair in kvpairs:
             outline=[pair[0][0],pair[0][1],str(pair[1])]
             outfile.write(','.join(outline)+'\n') # write the sorted list into the file
