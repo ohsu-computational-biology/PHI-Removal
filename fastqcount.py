@@ -42,7 +42,7 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
                         toremove=True
                     spikedict[curspike]+=1
                 if i%4==3:
-                    if not removal:
+                    if not toremove:
                         for line in currecord:
                             geneoutfile.write(line)
                     currecord=[]
