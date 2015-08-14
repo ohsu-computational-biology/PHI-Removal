@@ -8,7 +8,7 @@ import argparse # for parsing arguments
 from os import path, walk # some filesystem functions
 from collections import defaultdict
 from random import randint
-import ctypes
+#import ctypes
 
 def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
     """
@@ -22,11 +22,12 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
     Returns:
         spikedict: a dictionary with keys as spikes (SPIKE_ID, SPIKE) and values as counts of the spike
     """
+    reverse = path.endswith('R2')
     spikedict={}
-    for spike in spikeli:
+    for spike in spikeli[reverse][1:]:
         spikedict[spike]=0
+    spikedict[spikeli[0][0]] = "COUNT"
     spikedict[('0','')]=0 # initialize
-    i=0
     with open(path+'.fastq') as genefile:
         if removal:
             geneoutfile = open(path+'rm.fastq','w')
@@ -37,7 +38,7 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
                 if i%10000==0: # progress marker
                     print i
                 if i%4==1:
-                    curspike = process(record.strip(),sharedstrs,spikedata,spikeli,maxerrs)
+                    curspike = process(record.strip(),sharedstrs[reverse],spikedata,spikeli[reverse],maxerrs)
                     if curspike!=('0',''):
                         toremove=True
                     spikedict[curspike]+=1
@@ -54,7 +55,7 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
                 i+=1
                 if i%10000==0:
                     print i
-                spikedict[process(genefile.readline(),sharedstrs,spikedata,spikeli,maxerrs)]+=1
+                spikedict[process(genefile.readline(),sharedstrs[reverse],spikedata,spikeli[reverse],maxerrs)]+=1
                 genefile.readline()
                 genefile.readline()
     return spikedict
@@ -94,11 +95,13 @@ def parse_spikes(path):
     Arguments: path - path to the spike configuration file
     Returns: spikeli - the list of spikes in the following format: (SPIKE_ID, SPIKE)
     """
-    spikeli = []
+    spikeli = [[],[]]
     with open(path) as spikefile:
         for line in spikefile:
             vals=line.split()
-            spikeli.append((vals[0],vals[1])) # add all spikes to the list as (SPIKE_ID, SPIKE)
+            spikeli[0].append(tuple(vals)) # add all spikes to the list as (SPIKE_ID, SPIKE)
+            vals[1] = conjugate(vals[1])
+            spikeli[1].append(tuple(vals))
     return spikeli
     
 def process_spikes(spikeli):
@@ -109,13 +112,26 @@ def process_spikes(spikeli):
         sharedstrs: the two 9 character strings shared between all spikes, at the beginning and end of each spike
         spikedata: a list of dictionaries for each position of a spike, which point a character to spikes with that character in that position
     """
-    spikedata = ['']*(len(spikeli[0][1])-18) # initialize
-    sharedstrs=(spikeli[0][1][:9],spikeli[0][1][-9:])
-    for charno in range(len(spikeli[0][1])-18):
-        spikedata[charno]=defaultdict(set)
-        for spike in spikeli:
-            spikedata[charno][spike[1][charno+9]].add(spike) # build the spikedata dictionary for the specified position
+    #spikedata = [['']*(len(spikeli[0][0][1])-18),['']*(len(spikeli[0][0][1])-18)] # initialize - these empty strings will later be dicts
+    sharedstrs=[]
+    sharedstrs.append((spikeli[0][1][1][:9],spikeli[0][1][1][-9:]))
+    sharedstrs.append((spikeli[1][1][1][:9],spikeli[1][1][1][-9:]))
+    spikedata = ''
+    #for charno in range(len(spikeli[0][1])-18):
+    #    spikedata[charno]=defaultdict(set)
+    #    for spike in spikeli:
+    #        spikedata[charno][spike[1][charno+9]].add(spike) # build the spikedata dictionary for the specified position
     return sharedstrs,spikedata
+    
+def conjugate(spikechars):
+    newspike = ''
+    conjugation = {"A":"T","T":"A","G":"C","C":"G"}
+    for char in spikechars[::-1]:
+        if char in conjugation:
+            newspike += conjugation[char]
+        else:
+            newspike += char
+    return newspike
     
 def dist_write(spikedict,path):
     """
@@ -129,10 +145,13 @@ def dist_write(spikedict,path):
     with open(path, 'w') as outfile:
         kvpairs = []
         for key in spikedict:
-            kvpairs.append((key, spikedict[key]))
+            if spikedict[key]=="COUNT":
+                outfile.write(','.join(list(key)+["COUNT"])+'\n')
+            else:
+                kvpairs.append((key, spikedict[key]))
         kvpairs = sorted(kvpairs, key=lambda pair: (-pair[1],pair[0][1])) # sort spikes in descending order by count
         for pair in kvpairs:
-            outline=[pair[0][0],pair[0][1],str(pair[1])]
+            outline=list(pair[0])+[str(pair[1])]
             outfile.write(','.join(outline)+'\n') # write the sorted list into the file
     
 def main():
