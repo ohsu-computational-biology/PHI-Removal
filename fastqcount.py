@@ -28,6 +28,7 @@ def parse_reads(path,sharedstrs,spikedata,spikeli,maxerrs,removal):
         spikedict[spike]=0
     spikedict[spikeli[0][0]] = "COUNT"
     spikedict[('0','')]=0 # initialize
+    count =0
     with open(path+'.fastq') as genefile:
         if removal:
             geneoutfile = open(path+'rm.fastq','w')
@@ -83,7 +84,7 @@ def process(read,sharedstrs,spikedata,spikeli,maxerrs):
                 requiredchars=False
                 break
         if requiredchars: # check to see if there is a spike iff all required characters are present
-            print read[i:i+spikelen]
+            #print read[i:i+spikelen]
             for spike in spikeli:
                 if read[i:i+spikelen]==spike[1]:
                     return spike
@@ -116,6 +117,7 @@ def process_spikes(spikeli):
     sharedstrs=[]
     sharedstrs.append((spikeli[0][1][1][:9],spikeli[0][1][1][-9:]))
     sharedstrs.append((spikeli[1][1][1][:9],spikeli[1][1][1][-9:]))
+    print sharedstrs
     spikedata = ''
     #for charno in range(len(spikeli[0][1])-18):
     #    spikedata[charno]=defaultdict(set)
@@ -180,6 +182,7 @@ def main():
                 else:
                     name = folder + path.sep + name
                 spikedict = parse_reads(name, sharedstrs,spikedata,spikeli,args.max_errs,args.removal) # get the spike counts
+                #print spikedict
                 dist_write(spikedict, name+'.txt') # write the spike counts
     
 if __name__=='__main__':
