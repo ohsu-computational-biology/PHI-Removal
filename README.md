@@ -8,6 +8,10 @@ Summary
 stripPHI.py provides a way of converting a directory containing svs files into a directory containing tiles of the main image from the svs files. This removes the PHI contained in the other images also contained in an svs file.
 
 Inputs:
+
+
+
+
 1.	A directory containing images that should have PHI removed (required)
 2.	A directory to contain the processed images (required, if this directory already exists you will be prompted to overwrite it completely)
 3.	A destination file type – the processed images will have this file type (just the file extension in lowercase, no period, optional – defaults to png, fully supports png, untested for tiff, jpeg)
