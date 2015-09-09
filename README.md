@@ -4,7 +4,6 @@ Removes PHI from .svs files
 Latest revision: 7/23/15
 Matthew Jagielski: jagielsk@ohsu.edu
 
-Summary
 stripPHI.py provides a way of converting a directory containing svs files into a directory containing tiles of the main image from the svs files. This removes the PHI contained in the other images also contained in an svs file.
 
 Inputs:
