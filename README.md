@@ -17,7 +17,11 @@ Inputs:
 3.	A destination file type – the processed images will have this file type (just the file extension in lowercase, no period, optional – defaults to png, fully supports png, untested for tiff, jpeg)
 4.	Tile width – the width of the output tiles (in pixels, optional – defaults to 0, if 0 is provided no tiles will be made – just one image)
 5.	Tile height – the height of the output tiles (in pixels, optional - defaults to 0, if 0 is provided no tiles will be made – just one image)
+
+
 Examples:
+
+
 1.	python stripPHI.py –h
 This will provide a list of available command line options.
 2.	python stripPHI.py /path/to/input /path/to/output
